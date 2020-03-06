@@ -10,8 +10,8 @@ import (
 	"github.com/crisp-im/go-crisp-api/crisp"
 	"github.com/go-redis/redis"
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/methol/Crisp_Telegram_bot/utils"
 	"github.com/spf13/viper"
-	"github.com/tonyzzzzzz/Crisp_Telegram_bot/utils"
 )
 
 var bot *tgbotapi.BotAPI
@@ -77,14 +77,14 @@ func replyToUser(update *tgbotapi.Update) {
 		})
 	}
 
-	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "回复成功！")
+	msg := tgbotapi.NewMessage(update.Message.Chat.ID, "done!")
 	bot.Send(msg)
 }
 
 func sendMsgToAdmins(text string, WebsiteID string, SessionID string) {
 	for _, id := range config.Get("admins").([]interface{}) {
-		msg := tgbotapi.NewMessage(id.(int64), text)
-		msg.ParseMode = "Markdown"
+		msg := tgbotapi.NewMessage(int64(id.(int)), text)
+		msg.ParseMode = "markdown"
 		sent, _ := bot.Send(msg)
 
 		redisClient.Set(strconv.Itoa(sent.MessageID), &CrispMessageInfo{
@@ -144,19 +144,19 @@ func init() {
 
 			// Register handler on 'message:send/text' namespace
 			reg.On("message:send/text", func(evt crisp.EventsReceiveTextMessage) {
-				text := fmt.Sprintf(`*%s(%s): *%s`, *evt.User.Nickname, *evt.User.UserID, *evt.Content)
+				text := fmt.Sprintf(`*%s:* %s`, *evt.User.Nickname, *evt.Content)
 				sendMsgToAdmins(text, *evt.WebsiteID, *evt.SessionID)
 			})
 
 			// Register handler on 'message:send/file' namespace
 			reg.On("message:send/file", func(evt crisp.EventsReceiveFileMessage) {
-				text := fmt.Sprintf(`*%s(%s): *[File](%s)`, *evt.User.Nickname, *evt.User.UserID, evt.Content.URL)
+				text := fmt.Sprintf(`*%s:* [File](%s)`, *evt.User.Nickname, evt.Content.URL)
 				sendMsgToAdmins(text, *evt.WebsiteID, *evt.SessionID)
 			})
 
 			// Register handler on 'message:send/animation' namespace
 			reg.On("message:send/animation", func(evt crisp.EventsReceiveAnimationMessage) {
-				text := fmt.Sprintf(`*%s(%s): *[Animation](%s)`, *evt.User.Nickname, *evt.User.UserID, evt.Content.URL)
+				text := fmt.Sprintf(`*%s:* [Animation](%s)`, *evt.User.Nickname, evt.Content.URL)
 				sendMsgToAdmins(text, *evt.WebsiteID, *evt.SessionID)
 			})
 		},
@@ -180,6 +180,11 @@ func main() {
 
 	updates, _ = bot.GetUpdatesChan(u)
 
+	var admins = make(map[int64]bool)
+	for _, id := range config.Get("admins").([]interface{}) {
+		admins[int64(id.(int))] = true
+	}
+
 	for update := range updates {
 		if update.Message == nil {
 			continue
@@ -189,12 +194,11 @@ func main() {
 
 		switch update.Message.Command() {
 		case "start":
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Blinkload Telegram 客服助手")
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "Crisp Telegram Helper")
 			msg.ParseMode = "Markdown"
 			bot.Send(msg)
 		}
-
-		if contains(config.Get("admins").([]interface{}), int64(update.Message.From.ID)) {
+		if admins[int64(update.Message.From.ID)] {
 			replyToUser(&update)
 		}
 	}
